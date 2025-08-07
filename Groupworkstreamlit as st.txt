@@ -1,3 +1,6 @@
+
+
+matplotlib
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -125,6 +128,7 @@ if uploaded_file:
         pred = log_model.predict(input_scaled)[0]
         prob = log_model.predict_proba(input_scaled)[0][1]
         st.success(f"Prediction: {'Churn' if pred == 1 else 'No Churn'} (Confidence: {prob:.2%})")
+
 
 
 
