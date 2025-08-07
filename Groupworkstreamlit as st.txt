@@ -1,0 +1,130 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import classification_report, roc_curve, auc
+
+st.set_page_config(page_title="Churn App", layout="wide")
+st.title("Group 4 Customer Churn Prediction App")
+
+uploaded_file = st.file_uploader("Upload your Excel or CSV file", type=["xlsx", "csv"])
+
+if uploaded_file:
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+    else:
+        df = pd.read_excel(uploaded_file, engine="openpyxl")
+
+    st.subheader("Raw Data")
+    st.dataframe(df.head())
+
+    if "TotalCharges" in df.columns:
+        df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
+
+    df.dropna(inplace=True)
+
+    if "customerID" in df.columns:
+        df.drop(columns=["customerID"], inplace=True)
+
+    st.subheader("Summary Statistics")
+    st.write(df.describe(include="all"))
+
+    st.subheader("Churn Distribution")
+    if "Churn" in df.columns:
+        fig1, ax1 = plt.subplots()
+        sns.countplot(data=df, x="Churn", ax=ax1)
+        st.pyplot(fig1)
+
+    st.subheader("Histograms of Numerical Features")
+    num_cols = df.select_dtypes(include=["int64", "float64"]).columns
+    for col in num_cols:
+        fig, ax = plt.subplots()
+        sns.histplot(df[col], kde=True, ax=ax)
+        ax.set_title(f"Distribution of {col}")
+        st.pyplot(fig)
+
+    st.subheader("Correlation Matrix")
+    fig_corr, ax_corr = plt.subplots(figsize=(10, 6))
+    sns.heatmap(df[num_cols].corr(), annot=True, cmap="coolwarm", ax=ax_corr)
+    st.pyplot(fig_corr)
+
+    df_encoded = df.copy()
+    label_encoders = {}
+    for col in df_encoded.select_dtypes(include="object").columns:
+        if col != "Churn":
+            le = LabelEncoder()
+            df_encoded[col] = le.fit_transform(df_encoded[col])
+            label_encoders[col] = le
+
+    if "Churn" in df_encoded.columns:
+        df_encoded["Churn"] = df_encoded["Churn"].map({"No": 0, "Yes": 1})
+
+    scaler = StandardScaler()
+    X = df_encoded.drop(columns=["Churn"])
+    y = df_encoded["Churn"]
+    X_scaled = pd.DataFrame(scaler.fit_transform(X), columns=X.columns)
+
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+
+    log_model = LogisticRegression(max_iter=1000)
+    tree_model = DecisionTreeClassifier()
+
+    log_model.fit(X_train, y_train)
+    tree_model.fit(X_train, y_train)
+
+    st.subheader("Model Evaluation")
+    st.text("Logistic Regression Report")
+    st.text(classification_report(y_test, log_model.predict(X_test)))
+
+    st.text("Decision Tree Report")
+    st.text(classification_report(y_test, tree_model.predict(X_test)))
+
+    st.subheader("ROC Curve Comparison")
+    fig_roc, ax_roc = plt.subplots()
+    for model, name in zip([log_model, tree_model], ["Logistic Regression", "Decision Tree"]):
+        y_prob = model.predict_proba(X_test)[:, 1]
+        fpr, tpr, _ = roc_curve(y_test, y_prob)
+        ax_roc.plot(fpr, tpr, label=f"{name} (AUC = {auc(fpr, tpr):.2f})")
+    ax_roc.plot([0, 1], [0, 1], "k--")
+    ax_roc.set_xlabel("False Positive Rate")
+    ax_roc.set_ylabel("True Positive Rate")
+    ax_roc.set_title("ROC Curve")
+    ax_roc.legend()
+    st.pyplot(fig_roc)
+
+    st.subheader("Feature Importance (Decision Tree)")
+    importances = tree_model.feature_importances_
+    indices = np.argsort(importances)[-10:]
+    fig_imp, ax_imp = plt.subplots()
+    sns.barplot(x=importances[indices], y=X.columns[indices], ax=ax_imp)
+    ax_imp.set_title("Top 10 Feature Importances")
+    st.pyplot(fig_imp)
+
+    st.subheader("Predict Customer Churn")
+    input_data = {}
+    for col in X.columns:
+        if col in label_encoders:
+            options = df[col].unique().tolist()
+            input_data[col] = st.selectbox(f"{col}", options)
+        else:
+            min_val = float(df[col].min())
+            max_val = float(df[col].max())
+            mean_val = float(df[col].mean())
+            input_data[col] = st.slider(f"{col}", min_val, max_val, mean_val)
+
+    if st.button("Predict"):
+        input_df = pd.DataFrame([input_data])
+        for col in label_encoders:
+            input_df[col] = label_encoders[col].transform(input_df[col])
+        input_scaled = scaler.transform(input_df)
+        pred = log_model.predict(input_scaled)[0]
+        prob = log_model.predict_proba(input_scaled)[0][1]
+        st.success(f"Prediction: {'Churn' if pred == 1 else 'No Churn'} (Confidence: {prob:.2%})")
+
+
+
