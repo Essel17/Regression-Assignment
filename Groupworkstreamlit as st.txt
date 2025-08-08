@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 matplotlib>=3.0.0
+import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import LabelEncoder, StandardScaler
@@ -127,6 +128,7 @@ if uploaded_file:
         pred = log_model.predict(input_scaled)[0]
         prob = log_model.predict_proba(input_scaled)[0][1]
         st.success(f"Prediction: {'Churn' if pred == 1 else 'No Churn'} (Confidence: {prob:.2%})")
+
 
 
 
